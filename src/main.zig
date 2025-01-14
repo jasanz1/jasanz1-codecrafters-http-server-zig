@@ -16,6 +16,6 @@ pub fn main() !void {
 
     const connection = try listener.accept();
     try stdout.print("client connected!", .{});
-    try connection.stream.writeAll("HTTP/1.1 200 OK\r\n");
+    try connection.stream.writeAll("HTTP/1.1 200 OK\r\n\r\n");
     connection.stream.close();
 }

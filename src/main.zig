@@ -43,7 +43,7 @@ pub fn main() !void {
 
     const response = determineResponse(&activeRequest.path);
 
-    try stdout.print("response:\n {s}\n", .{try response});
+    try stdout.print("response:\n{s}\n", .{try response});
     _ = try connection.stream.write(try response);
 }
 

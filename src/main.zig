@@ -29,7 +29,7 @@ pub fn main() !void {
     defer connection.stream.close();
     try stdout.print("client connected!\n", .{});
     var buffer: [1024]u8 = undefined;
-    _ = try connection.stream.readAll(&buffer);
+    _ = try connection.stream.read(&buffer);
     var request = std.mem.tokenizeSequence(u8, &buffer, "\r\n");
     var requestLineToken = std.mem.tokenizeScalar(u8, request.next().?, ' ');
     activeRequest.method = requestLineToken.next().?;

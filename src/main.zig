@@ -1,20 +1,22 @@
 const std = @import("std");
 const net = std.net;
-const response = @import("responses.zig");
+const responseCode = @import("responsesCode.zig");
+const responseHeaders = @import("responseHeaders.zig");
+const responseBody = @import("responseBody.zig");
+const append = @import("append.zig").append;
+const stdout = std.io.getStdOut().writer();
 
 const ActiveRequest = struct {
     method: []const u8,
-    path: []const u8,
+    path: std.mem.TokenIterator(u8, .scalar),
     version: []const u8,
 };
-pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
+const ResponseComponents = struct {
+    code: fn ([]const u8) []const u8,
+    body: fn (std.mem.TokenIterator(u8, .scalar)) []const u8,
+};
 
-    var activeRequest = ActiveRequest{
-        .method = "",
-        .path = "",
-        .version = "",
-    };
+pub fn main() !void {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
     try stdout.print("Logs from your program will appear here!\n", .{});
 
@@ -32,17 +34,39 @@ pub fn main() !void {
     _ = try connection.stream.read(&buffer);
     var request = std.mem.tokenizeSequence(u8, &buffer, "\r\n");
     var requestLineToken = std.mem.tokenizeScalar(u8, request.next().?, ' ');
-    activeRequest.method = requestLineToken.next().?;
-    activeRequest.path = requestLineToken.next().?;
-    activeRequest.version = requestLineToken.next().?;
 
-    if (std.mem.eql(u8, activeRequest.path, "/")) {
-        try response.ok(connection);
+    var activeRequest = ActiveRequest{
+        .method = requestLineToken.next().?,
+        .path = std.mem.tokenizeScalar(u8, requestLineToken.next().?, '/'),
+        .version = requestLineToken.next().?,
+    };
+
+    const response = determineResponse(&activeRequest.path);
+
+    try stdout.print("response:\n {s}\n", .{try response});
+    _ = try connection.stream.write(try response);
+}
+
+fn determineResponse(path: *std.mem.TokenIterator(u8, .scalar)) ![]const u8 {
+    const baseToken = path.next() orelse "";
+    var basePathToken = std.mem.tokenizeScalar(u8, baseToken, '/');
+    const nakedBasePath = basePathToken.next() orelse "";
+    const basePath = try append("/", nakedBasePath, "");
+    if (std.mem.eql(u8, basePath, "/")) {
+        const body = responseBody.empty(path);
+        const header = responseHeaders.textPlain(body);
+        const response = responseCode.ok(header, body);
+        return response;
+    } else if (std.mem.eql(u8, basePath, "/echo")) {
+        const body = responseBody.echo(path);
+        const header = responseHeaders.textPlain(body);
+        const response = responseCode.ok(header, body);
+        return response;
     } else {
-        try response.notFound(connection);
-    }
+        const body = responseBody.empty(path);
+        const header = responseHeaders.textPlain(body);
+        const response = responseCode.notFound(header, body);
 
-    inline for (std.meta.fields(@TypeOf(activeRequest))) |f| {
-        std.log.debug(f.name ++ " {s}", .{@as(f.type, @field(activeRequest, f.name))});
+        return response;
     }
 }

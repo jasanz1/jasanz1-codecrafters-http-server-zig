@@ -58,7 +58,7 @@ fn determineResponse(request: *ActiveRequest) ![]const u8 {
     defer requestHeaders.deinit();
     while (request.headers.peek() != null) {
         const header = request.headers.next().?;
-        var headerToken = std.mem.tokenizeScalar(u8, header, ':');
+        var headerToken = std.mem.tokenizeSequence(u8, header, ": ");
         const key = headerToken.next().?;
         const value = headerToken.next().?;
         try requestHeaders.put(key, value);

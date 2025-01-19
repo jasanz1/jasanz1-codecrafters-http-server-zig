@@ -14,5 +14,6 @@ pub fn postFiles(path: *std.mem.TokenIterator(u8, .scalar), body: []const u8) !v
     }
     const fullPath = append(basePath.?, filePath, "") catch "";
     var file = fs.createFileAbsolute(fullPath, .{}) catch return error.openError;
+    try file.writeAll(body);
     defer file.close();
 }

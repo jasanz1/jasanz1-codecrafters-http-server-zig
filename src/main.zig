@@ -86,6 +86,16 @@ fn determineResponse(request: *ActiveRequest) ![]const u8 {
         const header = responseHeaders.textPlain(userAgent);
         const response = responseCode.ok(header, userAgent);
         return response;
+    } else if (std.mem.eql(u8, basePath, "/files")) {
+        if (responseBody.files(&path)) |body| {
+            const header = responseHeaders.application(body);
+            const response = responseCode.ok(header, body);
+            return response;
+        } else |err| {
+            try stdout.print("error: {s}\n", .{@errorName(err)});
+            const response = responseCode.notFound("", "");
+            return response;
+        }
     } else {
         const response = responseCode.notFound("", "");
         return response;

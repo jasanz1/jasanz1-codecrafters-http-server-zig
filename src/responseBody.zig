@@ -32,7 +32,7 @@ pub fn files(path: *std.mem.TokenIterator(u8, .scalar)) error{FileNotFound}![]co
     var buffer: [1024]u8 = undefined;
     var response: []const u8 = "";
     while (in_stream.readUntilDelimiterOrEof(&buffer, '\n') catch "") |line| {
-        response = append(response, line, "\n") catch "";
+        response = append(response, line, "") catch "";
     }
 
     return response;

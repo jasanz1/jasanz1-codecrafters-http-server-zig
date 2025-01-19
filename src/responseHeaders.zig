@@ -11,7 +11,7 @@ pub fn textPlain(body: []const u8) []const u8 {
 }
 
 pub fn application(body: []const u8) []const u8 {
-    const n = body.len;
+    const n = body.len - 1;
     const allocator = std.heap.page_allocator;
     const headers = std.fmt.allocPrint(allocator, "Content-Type: application/octet-stream\r\nContent-Length: {}\r\n", .{n}) catch "";
 

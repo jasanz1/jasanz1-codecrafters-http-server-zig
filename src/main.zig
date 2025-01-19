@@ -1,5 +1,6 @@
 const std = @import("std");
 const net = std.net;
+const request = @import("request.zig");
 const responseCode = @import("responsesCode.zig");
 const responseHeaders = @import("responseHeaders.zig");
 const responseBody = @import("responseBody.zig");
@@ -42,15 +43,15 @@ fn handleRequest(connection: net.Server.Connection) !void {
     _ = try connection.stream.read(&trimBuffer);
     var buffer = std.mem.tokenizeSequence(u8, &trimBuffer, "\r\n\r\n");
     const requestLineAndHeaders = buffer.next().?;
-    var request = std.mem.tokenizeSequence(u8, requestLineAndHeaders, "\r\n");
-    var requestLineToken = std.mem.tokenizeScalar(u8, request.next().?, ' ');
+    var curRequest = std.mem.tokenizeSequence(u8, requestLineAndHeaders, "\r\n");
+    var requestLineToken = std.mem.tokenizeScalar(u8, curRequest.next().?, ' ');
 
     var activeRequest = ActiveRequest{
         .method = requestLineToken.next().?,
         .path = std.mem.tokenizeScalar(u8, requestLineToken.next().?, '/'),
         .version = requestLineToken.next().?,
-        .headers = request,
-        .body = "", // request.next().?,
+        .headers = curRequest,
+        .body = buffer.next().?, // request.next().?,
     };
     const response = determineResponse(&activeRequest);
 
@@ -58,12 +59,12 @@ fn handleRequest(connection: net.Server.Connection) !void {
     _ = try connection.stream.write(try response);
 }
 
-fn determineResponse(request: *ActiveRequest) ![]const u8 {
-    var path = request.path;
+fn determineResponse(curRequest: *ActiveRequest) ![]const u8 {
+    var path = curRequest.path;
     var requestHeaders = std.StringHashMap([]const u8).init(std.heap.page_allocator);
     defer requestHeaders.deinit();
-    while (request.headers.peek() != null) {
-        const header = request.headers.next().?;
+    while (curRequest.headers.peek() != null) {
+        const header = curRequest.headers.next().?;
         var headerToken = std.mem.tokenizeSequence(u8, header, ": ");
         const key = headerToken.next().?;
         const value = headerToken.next().?;
@@ -73,31 +74,43 @@ fn determineResponse(request: *ActiveRequest) ![]const u8 {
     var basePathToken = std.mem.tokenizeScalar(u8, baseToken, '/');
     const nakedBasePath = basePathToken.next() orelse "";
     const basePath = try append("/", nakedBasePath, "");
-    if (std.mem.eql(u8, basePath, "/")) {
-        const response = responseCode.ok("", "");
-        return response;
-    } else if (std.mem.eql(u8, basePath, "/echo")) {
-        const body = responseBody.echo(&path);
-        const header = responseHeaders.textPlain(body);
-        const response = responseCode.ok(header, body);
-        return response;
-    } else if (std.mem.eql(u8, basePath, "/user-agent")) {
-        const userAgent = requestHeaders.get("User-Agent") orelse "";
-        const header = responseHeaders.textPlain(userAgent);
-        const response = responseCode.ok(header, userAgent);
-        return response;
-    } else if (std.mem.eql(u8, basePath, "/files")) {
-        if (responseBody.files(&path)) |body| {
-            const header = responseHeaders.application(body);
+    if (std.mem.eql(u8, curRequest.method, "GET")) {
+        if (std.mem.eql(u8, basePath, "/")) {
+            const response = responseCode.ok("", "");
+            return response;
+        } else if (std.mem.eql(u8, basePath, "/echo")) {
+            const body = responseBody.echo(&path);
+            const header = responseHeaders.textPlain(body);
             const response = responseCode.ok(header, body);
             return response;
-        } else |err| {
-            try stdout.print("error: {s}\n", .{@errorName(err)});
+        } else if (std.mem.eql(u8, basePath, "/user-agent")) {
+            const userAgent = requestHeaders.get("User-Agent") orelse "";
+            const header = responseHeaders.textPlain(userAgent);
+            const response = responseCode.ok(header, userAgent);
+            return response;
+        } else if (std.mem.eql(u8, basePath, "/files")) {
+            if (responseBody.files(&path)) |body| {
+                const header = responseHeaders.application(body);
+                const response = responseCode.ok(header, body);
+                return response;
+            } else |err| {
+                try stdout.print("error: {s}\n", .{@errorName(err)});
+                const response = responseCode.notFound("", "");
+                return response;
+            }
+        } else {
             const response = responseCode.notFound("", "");
             return response;
         }
-    } else {
-        const response = responseCode.notFound("", "");
-        return response;
+    } else if (std.mem.eql(u8, curRequest.method, "POST")) {
+        if (std.mem.eql(u8, basePath, "/files")) {
+            const length = std.fmt.parseInt(u8, requestHeaders.get("Content-Length") orelse "", 10) catch 0;
+            const body = curRequest.body[0..length];
+            try request.postFiles(&path, body);
+            const response = responseCode.created("", "");
+            return response;
+        }
     }
+    const response = responseCode.notFound("", "");
+    return response;
 }

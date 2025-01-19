@@ -71,8 +71,7 @@ fn determineResponse(request: *ActiveRequest) ![]const u8 {
     const basePath = try append("/", nakedBasePath, "");
     if (std.mem.eql(u8, basePath, "/")) {
         const body = responseBody.empty(&path);
-        const header = responseHeaders.textPlain(body);
-        const response = responseCode.ok(header, body);
+        const response = responseCode.ok("", body);
         return response;
     } else if (std.mem.eql(u8, basePath, "/echo")) {
         const body = responseBody.echo(&path);

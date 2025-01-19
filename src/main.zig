@@ -29,29 +29,31 @@ pub fn main() !void {
     });
     defer listener.deinit();
 
-    const connection = try listener.accept();
-    defer connection.stream.close();
-    try stdout.print("client connected!\n", .{});
-    var trimBuffer: [1024]u8 = undefined;
-    _ = try connection.stream.read(&trimBuffer);
-    var buffer = std.mem.tokenizeSequence(u8, &trimBuffer, "\r\n\r\n");
-    const requestLineAndHeaders = buffer.next().?;
-    var request = std.mem.tokenizeSequence(u8, requestLineAndHeaders, "\r\n");
-    var requestLineToken = std.mem.tokenizeScalar(u8, request.next().?, ' ');
+    while (true) {
+        const connection = try listener.accept();
+        defer connection.stream.close();
 
-    var activeRequest = ActiveRequest{
-        .method = requestLineToken.next().?,
-        .path = std.mem.tokenizeScalar(u8, requestLineToken.next().?, '/'),
-        .version = requestLineToken.next().?,
-        .headers = request,
-        .body = "", // request.next().?,
-    };
-    const response = determineResponse(&activeRequest);
+        try stdout.print("client connected!\n", .{});
+        var trimBuffer: [1024]u8 = undefined;
+        _ = try connection.stream.read(&trimBuffer);
+        var buffer = std.mem.tokenizeSequence(u8, &trimBuffer, "\r\n\r\n");
+        const requestLineAndHeaders = buffer.next().?;
+        var request = std.mem.tokenizeSequence(u8, requestLineAndHeaders, "\r\n");
+        var requestLineToken = std.mem.tokenizeScalar(u8, request.next().?, ' ');
 
-    try stdout.print("response:\n{s}\n", .{try response});
-    _ = try connection.stream.write(try response);
+        var activeRequest = ActiveRequest{
+            .method = requestLineToken.next().?,
+            .path = std.mem.tokenizeScalar(u8, requestLineToken.next().?, '/'),
+            .version = requestLineToken.next().?,
+            .headers = request,
+            .body = "", // request.next().?,
+        };
+        const response = determineResponse(&activeRequest);
+
+        try stdout.print("response:\n{s}\n", .{try response});
+        _ = try connection.stream.write(try response);
+    }
 }
-
 fn determineResponse(request: *ActiveRequest) ![]const u8 {
     var path = request.path;
     var requestHeaders = std.StringHashMap([]const u8).init(std.heap.page_allocator);
